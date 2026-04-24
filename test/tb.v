@@ -41,10 +41,9 @@ module tb;
     repeat (5) @(posedge clk);
     rst_n = 1'b1;
 
-    // run some cycles
-    repeat (500) @(posedge clk);
-
-    $finish;
+   // give cocotb plenty of time (gate-level sim is slower)
+repeat (20000) @(posedge clk);
+$finish;
   end
 
   // VCD dump (optional; cocotb will also generate one)
