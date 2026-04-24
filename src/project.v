@@ -1,27 +1,64 @@
-/*
- * Copyright (c) 2024 Your Name
- * SPDX-License-Identifier: Apache-2.0
- */
-
 `default_nettype none
 
-module tt_um_example (
-    input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
-    input  wire [7:0] uio_in,   // IOs: Input path
-    output wire [7:0] uio_out,  // IOs: Output path
-    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered, so you can ignore it
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
+// TinyTapeout top module MUST start with tt_um_
+module tt_um_ay5876_tinymips (
+    input  wire [7:0] ui_in,
+    output wire [7:0] uo_out,
+    input  wire [7:0] uio_in,
+    output wire [7:0] uio_out,
+    output wire [7:0] uio_oe,
+    input  wire       ena,
+    input  wire       clk,
+    input  wire       rst_n
 );
 
-  // All output pins must be assigned. If not used, assign to 0.
-  assign uo_out  = ui_in + uio_in;  // Example: ou_out is the sum of ui_in and uio_in
-  assign uio_out = 0;
-  assign uio_oe  = 0;
+    wire reset = ~rst_n;
 
-  // List all unused inputs to prevent warnings
-  wire _unused = &{ena, clk, rst_n, 1'b0};
+    // MIPS memory interface (byte-wide)
+    wire [7:0] memdata;
+    wire       memread, memwrite;
+    wire [7:0] adr, writedata;
+
+    // Instantiate Brunvand Tiny MIPS core (your mips.v)
+    mips #(.WIDTH(8), .REGBITS(3)) dut (
+        .clk(clk),
+        .reset(reset),
+        .memdata(memdata),
+        .memread(memread),
+        .memwrite(memwrite),
+        .adr(adr),
+        .writedata(writedata)
+    );
+
+    // ----------------------------
+    // Tiny ROM program (byte addressable)
+    // Program at address 0: J 0
+    // J opcode = 000010 => instruction = 0x08000000
+    // Little-endian bytes: 00 00 00 08 at addresses 0..3
+    // ----------------------------
+    function automatic [7:0] rom_byte(input [7:0] a);
+        begin
+            case (a)
+                8'd0: rom_byte = 8'h00;
+                8'd1: rom_byte = 8'h00;
+                8'd2: rom_byte = 8'h00;
+                8'd3: rom_byte = 8'h08;
+                default: rom_byte = 8'h00;
+            endcase
+        end
+    endfunction
+
+    // Combinational instruction/data read
+    assign memdata = rom_byte(adr);
+
+    // Expose address on output so test can verify fetch activity
+    assign uo_out = adr;
+
+    assign uio_out = 8'b0;
+    assign uio_oe  = 8'b0;
+
+    wire _unused = &{ena, ui_in, uio_in, memread, memwrite, writedata, 1'b0};
 
 endmodule
+
+`default_nettype wire
